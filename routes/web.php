@@ -23,15 +23,17 @@ Route::get('/', function () {
 })->name('home');
 
 // Registration Routes
-Route::get('/register', function () {
-    return view('auth.register');
-})->name('register.form');
+Route::get('/register', [RegisterController::class, 'registerform'])->name('register.form');
 
 Route::post('/register', [RegisterController::class, 'register'])->name('register');
 
 // Activation Routes
 Route::get('/activate/{user}', [RegisterController::class, 'activate'])
 ->name('activate');
+
+// Resend Activation Email Route
+Route::post('/resend-activation-email', [RegisterController::class, 'resendActivationEmail'])->name('resendActivationEmail');
+
 
 
 Route::middleware('web')->group(function () {
@@ -45,13 +47,13 @@ Route::post('/verification', [LoginController::class, 'verification'])->name('ve
 Route::get('/dashboard', function () {
     return view('dashboard');
 })->name('dashboard');
-});
-});
 
-
-// Resend Activation Email Route
-Route::post('resendActivationEmail', [RegisterController::class, 'resendActivationEmail'])
-->name('resendActivationEmail');
 
 // Logout Route
 Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
+
+});
+
+});
+
+

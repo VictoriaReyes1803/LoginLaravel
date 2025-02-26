@@ -12,6 +12,10 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
 use App\Models\User;
 use App\Mail\VerificationEmail;
+use Lunaweb\RecaptchaV3\Facades\RecaptchaV3;
+use Illuminate\Support\Facades\Http;
+
+
 use Illuminate\Support\Facades\Auth;
 
 class LoginController extends Controller
@@ -43,21 +47,30 @@ class LoginController extends Controller
     $request->validate([
         'email' => 'required|email',
         'password' => 'required|string',
+        'g-recaptcha-response' => 'required',
     ]);
+    $secretKey = env('RECAPTCHA_SECRET_KEY');
+    
+    $response = Http::withOptions(['verify' => false])->post('https://www.google.com/recaptcha/api/siteverify', [
+        'secret' => $secretKey,
+        'response' => $request->input('g-recaptcha-response'),
+    ]);
+    \Log::info('Recaptcha response', ['response' => $response->json()]);
+    
     $user = User::where('email', $request->email)->first();
 
     if (!$user) {
-        return response()->json(['message' => 'Invalid credentials'], 401);
+        return redirect()->route('login.form')->withErrors(['message' => 'Invalid credentials']);
     }
 
     if (!$user->is_active) {
-        return response()->json(['message' => 'Your account is deactivated.'], 403);
+        return redirect()->route('login.form')->withErrors(['message' => 'Your account is deactivated.']);
     }
 
-    if ($user->failed_login_attempts >= 5) {
+    if ($user->failed_login_attempts >= 10) {
         $user->is_active = false;
         $user->save();
-        return redirect()->route('login.form')->withErrors(['email' => 'Too many failed attempts. Your account has been locked.']);
+        return redirect()->route('login.form')->withErrors(['message' => 'Too many failed attempts. Your account has been locked.']);
     }
 
     if (Auth::attempt($request->only('email', 'password'))) {
@@ -81,6 +94,16 @@ class LoginController extends Controller
 
         return redirect()->route('login.form')->withErrors(['password' => 'Invalid credentials']);
     }
+}
+
+private function verifyRecaptcha($recaptchaResponse)
+{
+    $response = Http::asForm()->post('https://www.google.com/recaptcha/api/siteverify', [
+        'secret' => env('RECAPTCHA_SECRET_KEY'),
+        'response' => $recaptchaResponse,
+    ]);
+
+    return $response->json();
 }
 
      /**
