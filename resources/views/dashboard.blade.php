@@ -1,5 +1,5 @@
 @extends('layouts.Index')
-@section('title', 'Login')
+@section('title', 'dashboard')
 @section('header')
 <body>
     <div class="container mt-5">
