@@ -3,84 +3,58 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>2FA Verification</title>
+    <title>Verification</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body>
     <div class="container mt-5">
-        <h2>2FA Verification</h2>
-        <form id="verifyForm">
-        @csrf
+        <h2>Verification</h2>
+
+        <!-- Mostrar errores generales -->
+        @if ($errors->any())
+            <div class="alert alert-danger">
+                <ul>
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
+        @if (session('message'))
+            <div class="alert alert-info">
+                {{ session('message') }}
+            </div>
+        @endif
+
+        <form id="verificationForm" action="{{ route('verification') }}" method="POST">
+            @csrf
             <div class="mb-3">
                 <label for="code" class="form-label">Verification Code</label>
                 <input type="text" class="form-control" id="code" name="code" required>
-                <div id="codeError" class="text-danger"></div>
+                @error('code')
+                    <div class="text-danger">{{ $message }}</div>
+                @enderror
             </div>
-
-            <button type="submit" class="btn btn-primary">Verify Code</button>
+            <button type="submit" class="btn btn-primary">Verify</button>
         </form>
+    </div>
 
-        <div class="spinner-overlay" id="spinnerOverlay">
+
+    <div class="spinner-overlay" id="spinnerOverlay">
         <div class="spinner-border text-light" role="status">
-            <span class="visually-hidden">Charging...</span>
+            <span class="visually-hidden">Loading...</span>
         </div>
-        <span class="spinner-text">Charging...</span>
+        <div class="spinner-text">Verifying...</div>
     </div>
 
-        <div id="message" class="mt-3"></div>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <script>
-         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-        axios.defaults.headers.common['X-CSRF-TOKEN'] = csrfToken;
-        const token = sessionStorage.getItem('jwt_token');
-        if (!token) {
-            window.location.href = '{{ route('login') }}';
-        }
-
-
-        document.getElementById('verifyForm').addEventListener('submit', function (e) {
-            e.preventDefault(); 
-
-            const code = document.getElementById('code').value;
-
+        // Show spinner on form submission
+        document.getElementById('verificationForm').addEventListener('submit', function() {
             document.getElementById('spinnerOverlay').style.display = 'flex';
-
-            document.getElementById('codeError').textContent = '';
-            document.getElementById('message').textContent = '';
-
-            const token = sessionStorage.getItem('jwt_token');
-            
-            axios.post('{{ route('verification') }}', {
-                code: code,
-                token: token, 
-            })
-            .then(function (response) {
-                console.log(response);
-                
-                document.getElementById('spinnerOverlay').style.display = 'none';
-
-                document.getElementById('message').textContent = response.data.message;
-                sessionStorage.clear();
-
-                window.location.href = '{{ route('dashboard') }}';
-                            
-            })
-            .catch(function (error) {
-                document.getElementById('spinnerOverlay').style.display = 'none';
-
-                if (error.response && error.response.status === 400) {
-                   
-                    document.getElementById('codeError').textContent = 'Incorrect code. Please try again.';
-                } else {
-                    console.error(error);
-                    alert(error.response.data.message);
-                }
-            });
         });
-    </script>
+        </script>
+
 </body>
 
 <style>

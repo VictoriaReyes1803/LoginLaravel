@@ -23,9 +23,7 @@ Route::get('/', function () {
 })->name('home');
 
 // Registration Routes
-Route::get('/register', function () {
-    return view('auth.register');
-})->name('register.form');
+Route::get('/register', [RegisterController::class, 'registerform'])->name('register.form');
 
 Route::post('/register', [RegisterController::class, 'register'])->name('register');
 
@@ -33,30 +31,29 @@ Route::post('/register', [RegisterController::class, 'register'])->name('registe
 Route::get('/activate/{user}', [RegisterController::class, 'activate'])
 ->name('activate');
 
-// Login Routes
-Route::get('/login', function () {
-    return view('auth.login');
-})->name('login.form');
+// Resend Activation Email Route
+Route::post('/resend-activation-email', [RegisterController::class, 'resendActivationEmail'])->name('resendActivationEmail');
 
+
+
+Route::middleware('web')->group(function () {
+// Login Routes
+Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login.form');
 Route::post('/login', [LoginController::class, 'login'])->name('login');
 
-Route::get('/verification', function () {
-    return view('auth.verification');
-})->name('verification');
-
-
-Route::middleware('jwt.auth')->group(function () {
-Route::post('/verification', [LoginController::class, 'verification'])->name('verification');
-});
-// Dashboard Route
+Route::middleware('auth')->group(function () {
+Route::get('/verification', [LoginController::class, 'showVerificationForm'])->name('verification');
+Route::post('/verification', [LoginController::class, 'verification'])->name('verification.submit');
 Route::get('/dashboard', function () {
     return view('dashboard');
-})->middleware([IsVerified::class])->name('dashboard');
+})->name('dashboard');
 
-// Resend Activation Email Route
-Route::post('resendActivationEmail', [RegisterController::class, 'resendActivationEmail'])
-->name('resendActivationEmail');
 
 // Logout Route
-Route::post('/logout', [LoginController::class, 'logout'])
-->name('logout');
+Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
+
+});
+
+});
+
+

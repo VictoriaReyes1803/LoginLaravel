@@ -11,10 +11,17 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\ActivationEmail;
 use Illuminate\Support\Facades\Cache;
+use Lunaweb\RecaptchaV3\Facades\RecaptchaV3;
+use Illuminate\Support\Facades\Http;
 
 
 class RegisterController extends Controller
 {
+
+    public function registerform()
+    {
+        return view('auth.register');
+    }
     /**
      * Register a new user.
      * 
@@ -26,12 +33,23 @@ class RegisterController extends Controller
      */
     public function register(Request $request)
     { 
+        \Log::info('Datos del formulario:', $request->all());
         
         $request->validate([
             'name' => 'required|string',
             'email' => 'required|email|unique:users,email',
-            'password' => 'required|string|min:8',
+            'password' => 'required|string|min:8|regex:/[a-z]/|regex:/[A-Z]/|regex:/[0-9]/|regex:/[@$!%*#?&]/',
+            'g-recaptcha-response' => 'required',
         ]);
+
+        $secretKey = env('RECAPTCHA_SECRET_KEY');
+    
+        $response = Http::withOptions(['verify' => false])->post('https://www.google.com/recaptcha/api/siteverify', [
+            'secret' => $secretKey,
+            'response' => $request->input('g-recaptcha-response'),
+        ]);
+        \Log::info('Recaptcha response', ['response' => $response->json()]);
+
 
         $user = User::create([
             'name' => $request->name,
@@ -42,9 +60,7 @@ class RegisterController extends Controller
        
         Mail::to($user->email)->send(new ActivationEmail($user));
 
-        return response()->json([
-            'message' => 'User created successfully, An email has been sent to activate your account',
-        ], 201);
+        return redirect()->route('register')->with('success', 'User created successfully. An email has been sent to activate your account.');
     }
 
      /**
@@ -61,36 +77,34 @@ class RegisterController extends Controller
     {
         
         if(!$request->hasValidSignature()){
-            return response()->json([
-              "msg" => "Invalid activation link"
-            ], 401);
+            return redirect()->route('login.form')->with([
+              "message" => "Invalid activation link"
+            ]);
     
           }
 
         if (!$user) {
-            return response()->json([
+            return redirect()->route('login.form')->with([
                 'message' => 'User not found',
-            ], 404);
+            ]);
         }
 
         if ($user->is_active) {
-            return response()->json([
+            return redirect()->route('login.form')->with([
                 'message' => 'User already activated',
-            ], 400);
+            ]);
         }
 
         if ($user->activation_token !== $request->token) {
-            return response()->json([
+            return redirect()->route('login.form')->with([
                 'message' => 'Invalid activation token',
-            ], 400);
+            ]);
         }
 
         $user->is_active = true;
         $user->save();
 
-        return response()->json([
-            'message' => 'User activated successfully',
-        ]);
+        return redirect()->route('register.form')->with('success', 'User activated successfully.');
     }
 
       /**
@@ -113,22 +127,22 @@ class RegisterController extends Controller
         $user = User::where('email', $request->email)->first();
 
         if (!$user) {
-            return response()->json(['message' => 'User not found.'], 404);
+            return redirect()->route('register.form')->with(['message' => 'User not found.']);
         }
 
         if ($user->is_active) {
-            return response()->json(['message' => 'The account is already active.'], 400);
+            return redirect()->route('register.form')->with(['message' => 'The account is already active.']);
         }
 
         $cacheKey = 'resend_email_' . $user->email;
         if (Cache::has($cacheKey)) {
-            return response()->json(['message' => 'An email has already been sent recently. Please try again later.'], 429);
+            return redirect()->route('register.form')->with(['message' => 'An email has already been sent recently. Please try again later.']);
         }
 
         Mail::to($user->email)->send(new ActivationEmail($user));
 
         Cache::put($cacheKey, true, now()->addMinutes(1));
 
-        return response()->json(['message' => 'Activation email successfully resent.'], 200);
+        return redirect()->route('register.form')->with(['message' => 'Activation email successfully resent.']);
     }
 }

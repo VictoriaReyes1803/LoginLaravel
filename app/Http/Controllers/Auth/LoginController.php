@@ -10,10 +10,27 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
+use App\Models\User;
 use App\Mail\VerificationEmail;
+use Lunaweb\RecaptchaV3\Facades\RecaptchaV3;
+use Illuminate\Support\Facades\Http;
+
+
+use Illuminate\Support\Facades\Auth;
 
 class LoginController extends Controller
 {
+
+    public function showLoginForm()
+    {
+        return view('auth.login');
+    }
+
+    public function showVerificationForm()
+    {
+        return view('auth.verification');
+    }
+
     /**
      * Handle user login.
      * 
@@ -30,45 +47,63 @@ class LoginController extends Controller
     $request->validate([
         'email' => 'required|email',
         'password' => 'required|string',
+        'g-recaptcha-response' => 'required',
     ]);
-
-    if(($user = \App\Models\User::where('email', $request->email)->first()) == null )
-    {
-        return response()->json(['message' => 'User does not exist'], 400);
-    }
+    $secretKey = env('RECAPTCHA_SECRET_KEY');
+    
+    $response = Http::withOptions(['verify' => false])->post('https://www.google.com/recaptcha/api/siteverify', [
+        'secret' => $secretKey,
+        'response' => $request->input('g-recaptcha-response'),
+    ]);
+    \Log::info('Recaptcha response', ['response' => $response->json()]);
+    
+    $user = User::where('email', $request->email)->first();
 
     if (!$user) {
-        return response()->json(['message' => 'Invalid credentials'], 401);
+        return redirect()->route('login.form')->withErrors(['message' => 'Invalid credentials']);
     }
 
     if (!$user->is_active) {
-        return response()->json(['message' => 'Your account is deactivated.'], 403);
+        return redirect()->route('login.form')->withErrors(['message' => 'Your account is deactivated.']);
     }
 
-    if ($user->failed_login_attempts >= 5) {
+    if ($user->failed_login_attempts >= 10) {
         $user->is_active = false;
         $user->save();
-        return response()->json(['message' => 'Too many failed attempts. Your account has been locked.'], 403);
+        return redirect()->route('login.form')->withErrors(['message' => 'Too many failed attempts. Your account has been locked.']);
     }
 
-    if ($token = JWTAuth::attempt($request->only('email', 'password'))) {
-
-        $user->failed_login_attempts = 0; 
-        $user->save();
+    if (Auth::attempt($request->only('email', 'password'))) {
+        $user->failed_login_attempts = 0;
 
         $code = rand(100000, 999999);
         $user->verification_token = $code;
         $user->is_verified = false;
         $user->save();
-        Mail::to($user->email)->send(new VerificationEmail($code, $user));
 
-        return response()->json(['message' => 'Verification code sent to email', 'token' => $token], 200);
+        Mail::to($user->email)->send(new VerificationEmail($code, $user));
+        $request->session()->put('user_id', $user->id);
+        $request->session()->put('verification_code', $code);
+
+        \Log::info('User authenticated', ['user_id' => Auth::id(), 'session_id' => session()->getId(), 'session_data' => session()->all()]);
+
+        return redirect()->route('verification')->with('message', 'Verification code sent to your email.');
     } else {
         $user->failed_login_attempts += 1;
         $user->save();
 
-        return response()->json(['message' => 'Invalid credentials'], 401);
+        return redirect()->route('login.form')->withErrors(['password' => 'Invalid credentials']);
     }
+}
+
+private function verifyRecaptcha($recaptchaResponse)
+{
+    $response = Http::asForm()->post('https://www.google.com/recaptcha/api/siteverify', [
+        'secret' => env('RECAPTCHA_SECRET_KEY'),
+        'response' => $recaptchaResponse,
+    ]);
+
+    return $response->json();
 }
 
      /**
@@ -84,21 +119,34 @@ class LoginController extends Controller
 
     public function verification(Request $request)
     {
+        \Log::info('Verification attempt', [
+            'user_id' => Auth::id(),
+            'session_id' => session()->getId(),
+            'session_data' => session()->all(),
+            'stored_user_id' => $request->session()->get('user_id'),
+            'stored_verification_code' => $request->session()->get('verification_code')
+        ]);
+
+        if (!Auth::check()) {
+            \Log::warning('User not authenticated', ['session_id' => session()->getId()]);
+            return redirect()->route('login.form')->withErrors(['error' => 'You must log in first.']);
+        }
+
+        $userId = $request->session()->get('user_id');
+        $verificationCode = $request->session()->get('verification_code');
+
+        \Log::info('Verification attempt', ['user_id' => Auth::id()]);
 
         $request->validate([
             'code' => 'required|numeric',
-            'token' => 'required|string',
+           
         ]);
-    
-        $user = JWTAuth::setToken($request->token)->authenticate();
-    
-        if (!$user) {
-            return redirect()->route('login')->with('error', 'You must log in first.');
-        }
+        $user = Auth::user();
+
         if ($user->failed_verification_attempts >= 5) {
             $user->is_active = false;
             $user->save();
-            return response()->json(['message' => 'Too many failed attempts. Your account has been locked.'], 403);
+            return redirect()->route('login.form')->withErrors(['error' => 'Too many failed attempts. Your account has been locked.']);
         }
     
         if ($user->verification_token == $request->code) {
@@ -106,21 +154,15 @@ class LoginController extends Controller
             $user->failed_verification_attempts = 0;
             $user->verification_token = null;
             $user->save();
+            $request->session()->forget(['user_id', 'verification_code']);
 
-            $token = JWTAuth::fromUser($user);
+            return redirect()->route('dashboard')->with('message', 'Account verified successfully.');
 
-        
-            $cookie = cookie('jwt', $token, 60);
-    
-            return response()->json([
-                'message' => 'Cuenta verificada',
-               
-            ])->withCookie($cookie);
         }
         else{
             $user->failed_verification_attempts += 1;
             $user->save();
-            return response()->json(['message' => 'Invalid verification code.'],400);
+            return redirect()->route('verification.form')->withErrors(['code' => 'Invalid verification code.']);
         }
     
         return response()->json(['message' => 'Invalid verification code.'],400);
@@ -135,20 +177,16 @@ class LoginController extends Controller
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\RedirectResponse
      */
-public function logout(Request $request)
+    public function logout(Request $request)
 {
+   
+    Auth::logout();
 
-    $token = JWTAuth::getToken();
-        if ($token && JWTAuth::check()) {
-            
-            JWTAuth::invalidate($token);
-           
-        }
+    $request->session()->invalidate();
+    $request->session()->regenerateToken();
 
-        Cookie::queue(Cookie::forget('jwt'));
-        return redirect()->route('login')->with('success', 'You have logged out successfully.');
+    return redirect()->route('login.form')->with('message', 'You have logged out successfully.');
 }
-
 
 
 }
