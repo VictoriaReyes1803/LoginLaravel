@@ -53,7 +53,7 @@
                     data-callback="javascriptCallback"
                     ></div>
 
-            <input type="hidden" name="g-recaptcha-response" id="g-recaptcha-response">
+            <input type="" name="g-recaptcha-response" id="g-recaptcha-response">
 
 
             
