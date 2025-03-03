@@ -50,6 +50,18 @@ class RegisterController extends Controller
         ]);
         \Log::info('Recaptcha response', ['response' => $response->json()]);
 
+        $turnstileSecret = env('TURNSTILE_SECRET_KEY');
+        $turnstileResponse = Http::withOptions(['verify' => false])->post('https://challenges.cloudflare.com/turnstile/v0/siteverify', [
+            'secret' => $turnstileSecret,
+            'response' => $request->input('cf-turnstile-response'),
+            'remoteip' => $request->ip(),
+        ]);
+
+        if (!$turnstileResponse->json('success')) {
+            return redirect()->route('login.form')->withErrors(['message' => 'Cloudflare Turnstile validation failed']);
+        }
+
+        
 
         $user = User::create([
             'name' => $request->name,

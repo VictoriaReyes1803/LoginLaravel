@@ -6,6 +6,7 @@
     <title>Login</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://www.google.com/recaptcha/api.js?render=6LdL2OIqAAAAAC3E8xbcg8cz9pFvG-0kjs9B9-Zb" async defer></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js"></script>
 </head>
 <body>
     <div class="container mt-5">
@@ -46,6 +47,11 @@
                     <div class="text-danger">{{ $message }}</div>
                 @enderror
             </div>
+            <div
+                    class="cf-turnstile"
+                    data-sitekey="0x4AAAAAAA_a5H6azc783Tuw"
+                    data-callback="javascriptCallback"
+                    ></div>
 
             <input type="hidden" name="g-recaptcha-response" id="g-recaptcha-response">
 
@@ -68,6 +74,10 @@
 
 
     <script>
+        function turnstileCallback(token) {
+        document.getElementById('cf-turnstile-response').value = token;
+    }
+    
         document.getElementById('LoginForm').addEventListener('submit', function(event) {
             event.preventDefault();
             document.getElementById('spinnerOverlay').style.display = 'flex';

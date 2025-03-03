@@ -7,6 +7,7 @@
     <title>Registro</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://www.google.com/recaptcha/api.js?render=6LdL2OIqAAAAAC3E8xbcg8cz9pFvG-0kjs9B9-Zb" async defer></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js"></script>
 </head>
 <body>
     <div class="container mt-5">
@@ -56,6 +57,13 @@
                 <label for="password_confirmation" class="form-label">Confirm Password</label>
                 <input type="password" class="form-control" id="password_confirmation" name="password_confirmation" required>
             </div>
+
+            <div
+                    class="cf-turnstile"
+                    data-sitekey="0x4AAAAAAA_a5H6azc783Tuw"
+                    data-callback="javascriptCallback"
+                    ></div>
+
             <input type="hidden" name="g-recaptcha-response" id="g-recaptcha-response">
 
 
@@ -83,7 +91,10 @@
 
 
     <script>
-        // Manejar el envío del formulario con reCAPTCHA y spinner
+       function turnstileCallback(token) {
+        document.getElementById('cf-turnstile-response').value = token;
+    }
+    
         document.getElementById('registerForm').addEventListener('submit', function (e) {
             e.preventDefault();
             document.getElementById('spinnerOverlay').style.display = 'flex';
