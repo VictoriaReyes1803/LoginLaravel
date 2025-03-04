@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use App\Models\User;
+
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
@@ -13,7 +14,7 @@ use App\Mail\ActivationEmail;
 use Illuminate\Support\Facades\Cache;
 use Lunaweb\RecaptchaV3\Facades\RecaptchaV3;
 use Illuminate\Support\Facades\Http;
-
+use GuzzleHttp\Client;
 
 class RegisterController extends Controller
 {
@@ -43,12 +44,32 @@ class RegisterController extends Controller
         ]);
 
         $secretKey = env('RECAPTCHA_SECRET_KEY');
-    
-        $response = Http::withOptions(['verify' => false])->post('https://www.google.com/recaptcha/api/siteverify', [
-            'secret' => $secretKey,
+    $client = new Client();
+    $response = $client->post('https://www.google.com/recaptcha/api/siteverify', [
+        'form_params' => [
+            'secret'   => config('services.recaptcha.secret'),
             'response' => $request->input('g-recaptcha-response'),
-        ]);
-        \Log::info('Recaptcha response', ['response' => $response->json()]);
+            'remoteip' => $request->ip(),
+        ],
+    ]);
+    $data = json_decode($response->getBody(), true);
+
+    if (isset($data['success']) && $data['success']) {
+   
+        \Log::info('reCAPTCHA validado con éxito', ['data' => $data]);
+        $score = $data['score'];
+
+        if ($score < 0.5) {
+            \Log::warning('Puntuación baja de reCAPTCHA', ['score' => $score]);
+            return redirect()->route('register')->withErrors(['message' => 'Puntuación de reCAPTCHA baja, por favor intente de nuevo.']);
+        }
+    } else {
+        \Log::info('reCAPTCHA no validado', ['data' => $data]);
+        return redirect()->route('register')->withErrors(['message' => 'reCAPTCHA no validado']);
+    }
+
+
+    
 
         $turnstileSecret = env('TURNSTILE_SECRET_KEY');
         $turnstileResponse = Http::withOptions(['verify' => false])->post('https://challenges.cloudflare.com/turnstile/v0/siteverify', [
@@ -58,7 +79,7 @@ class RegisterController extends Controller
         ]);
 
         if (!$turnstileResponse->json('success')) {
-            return redirect()->route('login.form')->withErrors(['message' => 'Cloudflare Turnstile validation failed']);
+            return redirect()->route('register')->withErrors(['message' => 'Cloudflare Turnstile validation failed']);
         }
 
         
@@ -72,7 +93,10 @@ class RegisterController extends Controller
        
         Mail::to($user->email)->send(new ActivationEmail($user));
 
-        return redirect()->route('register')->with('success', 'User created successfully. An email has been sent to activate your account.');
+        return redirect()->route('register')->with([
+            'success' => 'User registered successfully. Please check your email for activation link.',
+            'email' => $user->email,
+        ]);
     }
 
      /**
@@ -132,11 +156,15 @@ class RegisterController extends Controller
 
     public function resendActivationEmail(Request $request)
     {
+        \Log::info('Datos del formulario:', $request->all());
+
         $request->validate([
             'email' => 'required|email',
         ]);
 
         $user = User::where('email', $request->email)->first();
+        \Log::info('Datos del formulario:', $user->toArray());
+
 
         if (!$user) {
             return redirect()->route('register.form')->with(['message' => 'User not found.']);
@@ -155,6 +183,8 @@ class RegisterController extends Controller
 
         Cache::put($cacheKey, true, now()->addMinutes(1));
 
-        return redirect()->route('register.form')->with(['message' => 'Activation email successfully resent.']);
+        \Log::info('Activation email resent', ['user_id' => $user->id]);
+
+        return redirect()->route('register')->with(['success' => 'Activation email successfully resent.']);
     }
 }

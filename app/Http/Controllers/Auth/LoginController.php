@@ -9,14 +9,17 @@ use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Auth;
+
+use Google\Cloud\RecaptchaEnterprise\V1\RecaptchaEnterpriseServiceClient;
+use Google\Cloud\RecaptchaEnterprise\V1\Event;
+use Google\Cloud\RecaptchaEnterprise\V1\Assessment;
 use Illuminate\Support\Facades\Log;
 use App\Models\User;
 use App\Mail\VerificationEmail;
 use Lunaweb\RecaptchaV3\Facades\RecaptchaV3;
 use Illuminate\Support\Facades\Http;
-
-
-use Illuminate\Support\Facades\Auth;
+use GuzzleHttp\Client;
 
 class LoginController extends Controller
 {
@@ -50,25 +53,47 @@ class LoginController extends Controller
         'g-recaptcha-response' => 'required',
         'cf-turnstile-response' => 'required',
     ]);
+   
     $secretKey = env('RECAPTCHA_SECRET_KEY');
-    
-    $response = Http::withOptions(['verify' => false])->post('https://www.google.com/recaptcha/api/siteverify', [
-        'secret' => $secretKey,
-        'response' => $request->input('g-recaptcha-response'),
-    ]);
-    \Log::info('Recaptcha response', ['response' => $response->json()]);
-
-
-    $turnstileSecret = env('TURNSTILE_SECRET_KEY');
-        $turnstileResponse = Http::withOptions(['verify' => false])->post('https://challenges.cloudflare.com/turnstile/v0/siteverify', [
-            'secret' => $turnstileSecret,
-            'response' => $request->input('cf-turnstile-response'),
+    $client = new Client();
+    $response = $client->post('https://www.google.com/recaptcha/api/siteverify', [
+        'form_params' => [
+            'secret'   => config('services.recaptcha.secret'),
+            'response' => $request->input('g-recaptcha-response'),
             'remoteip' => $request->ip(),
-        ]);
+        ],
+    ]);
+    $data = json_decode($response->getBody(), true);
 
-        if (!$turnstileResponse->json('success')) {
-            return redirect()->route('login.form')->withErrors(['message' => 'Cloudflare Turnstile validation failed']);
+    if (isset($data['success']) && $data['success']) {
+   
+        \Log::info('reCAPTCHA validado con éxito', ['data' => $data]);
+        $score = $data['score'];
+
+        if ($score < 0.5) {
+            \Log::warning('Puntuación baja de reCAPTCHA', ['score' => $score]);
+            return redirect()->route('login.form')->withErrors(['message' => 'Puntuación de reCAPTCHA baja, por favor intente de nuevo.']);
         }
+    } else {
+        \Log::info('reCAPTCHA no validado', ['data' => $data]);
+        return redirect()->route('login.form')->withErrors(['message' => 'reCAPTCHA no validado']);
+    }
+
+
+
+
+        $turnstileSecret = env('TURNSTILE_SECRET_KEY');
+            $turnstileResponse = Http::withOptions(['verify' => false])->post('https://challenges.cloudflare.com/turnstile/v0/siteverify', [
+                'secret' => $turnstileSecret,
+                'response' => $request->input('cf-turnstile-response'),
+                'remoteip' => $request->ip(),
+            ]);
+
+            if (!$turnstileResponse->json('success')) {
+                return redirect()->route('login.form')->withErrors(['message' => 'Cloudflare Turnstile validation failed']);
+            }
+
+
 
     
     $user = User::where('email', $request->email)->first();
@@ -98,6 +123,8 @@ class LoginController extends Controller
         Mail::to($user->email)->send(new VerificationEmail($code, $user));
         $request->session()->put('user_id', $user->id);
         $request->session()->put('verification_code', $code);
+        $request->session()->put('user', $user);
+        $request->session()->save();
 
         \Log::info('User authenticated', ['user_id' => Auth::id(), 'session_id' => session()->getId(), 'session_data' => session()->all()]);
 

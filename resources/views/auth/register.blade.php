@@ -70,13 +70,22 @@
             <button type="submit" class="btn btn-primary">Register</button>
 
             </form>
+            @if(session('success'))
+            @if(session('email'))
+            <div id="postRegisterButtonContainer" class="mt-3">
+        <button type="button" id="resendActivation" class="btn btn-link  ">Resend activation email</button>
+        </div>
+        <script>
+        var userEmail = "{{ session('email') }}";
+    </script>
+        @endif
+        @endif
+
             <div class="mt-3">
             <p>Already have an account?<a href="/login" class="btn btn-link">Login here</a></p>
         </div>
         
-        <div id="postRegisterButtonContainer" class="mt-3" style="display: none;">
-        <button type="button" id="resendActivation" class="btn btn-link  ">Resend activation email</button>
-        </div>
+        
 
 
         <div class="spinner-overlay" id="spinnerOverlay">
@@ -114,13 +123,14 @@
                     document.getElementById('registerForm').submit();
                 });
             });
-
+           
             console.log("Formulario enviado");
+
         });
 
 
         document.getElementById('resendActivation').addEventListener('click', function () {
-            const email = document.getElementById('email').value;
+            const email = userEmail;
 
             if (!email) {
                 alert('Please enter an email address.');
@@ -129,23 +139,33 @@
 
             document.getElementById('spinnerOverlay').style.display = 'flex';
 
-            fetch('{{ route('resendActivationEmail') }}', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                },
-                body: JSON.stringify({ email: email })
-            })
-            .then(response => response.json())
-            .then(data => {
-                document.getElementById('spinnerOverlay').style.display = 'none';
-                alert(data.message);
-            })
-            .catch(error => {
-                document.getElementById('spinnerOverlay').style.display = 'none';
-                alert('An error occurred while resending the activation email.');
-            });
+
+
+            fetch("{{ route('resendactivationemail') }}", {  // Usamos la URL de la ruta directamente
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+        },
+        body: JSON.stringify({ email: email })  
+    })
+    .then(response => response.text())
+    .then(data => {
+        document.getElementById('spinnerOverlay').style.display = 'none';  
+
+        if (data.success) {
+            alert(data.success); 
+            window.location.href = data.redirect || '{{ route('register.form') }}';  
+        } else if (data.error) {
+            alert(data.error);  
+        }
+    })
+    .catch(error => {
+        document.getElementById('spinnerOverlay').style.display = 'none';  
+        console.log('Error:', error);
+        alert('Error resending the activation email.', error);
+    });
+       
         });
     </script>
 

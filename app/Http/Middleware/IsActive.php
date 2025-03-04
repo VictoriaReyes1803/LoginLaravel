@@ -16,18 +16,19 @@ class IsActive
      */
     public function handle(Request $request, Closure $next)
     {
-        // Verifica si el usuario está autenticado
+        
         if (!auth()->check()) {
-            return redirect()->route('login'); // Redirige si no está autenticado
+            return redirect()->route('login.form'); 
         }
 
         $user = auth()->user();
 
-        // Verifica si el usuario está activo
         if (!$user->is_active) {
-            return redirect()->route('verification'); // Redirige si no está activo
+            return redirect()->route('login.form')->with([
+                'message' => 'User not active',
+            ]);
         }
 
-        return $next($request); // Deja pasar la solicitud si todo está bien
+        return $next($request); 
     }
 }
