@@ -22,6 +22,9 @@ Route::get('/', function () {
     return view('welcome');
 })->name('home');
 
+
+
+
 // Registration Routes
 Route::get('/register', [RegisterController::class, 'registerform'])->name('register.form');
 
@@ -31,28 +34,33 @@ Route::post('/register', [RegisterController::class, 'register'])->name('registe
 Route::get('/activate/{user}', [RegisterController::class, 'activate'])
 ->name('activate');
 
-// Resend Activation Email Route
-Route::post('/resend-activation-email', [RegisterController::class, 'resendActivationEmail'])->name('resendActivationEmail');
 
 
 
 Route::middleware('web')->group(function () {
+    // Resend Activation Email Route
+Route::post('/resendactivationemail', [RegisterController::class, 'resendActivationEmail'])->name('resendactivationemail');
+
 // Login Routes
 Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login.form');
 Route::post('/login', [LoginController::class, 'login'])->name('login');
 
-Route::middleware('auth')->group(function () {
+Route::middleware(['auth', 'IsActive'])->group(function () {
 Route::get('/verification', [LoginController::class, 'showVerificationForm'])->name('verification');
 Route::post('/verification', [LoginController::class, 'verification'])->name('verification.submit');
+
+Route::middleware(['IsVerified'])->group(function () {
 Route::get('/dashboard', function () {
     return view('dashboard');
 })->name('dashboard');
-
 
 // Logout Route
 Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
 
 });
+});
+
+
 
 });
 

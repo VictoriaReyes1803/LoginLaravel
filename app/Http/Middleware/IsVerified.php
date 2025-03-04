@@ -19,19 +19,15 @@ class IsVerified
      */
     public function handle(Request $request, Closure $next): Response
     {
-        $token = $request->cookie('jwt');
-
-            if (!$token) {
-                return redirect()->route('login')->with('error', 'Token no encontrado. Inicia sesión.');
-            }
-
-            JWTAuth::setToken($token);
-            $user = JWTAuth::authenticate();            
-
-            if (!$user || !$user->is_verified || !$user->is_active) { 
-                return redirect()->route('login')->with('error', 'Acceso denegado.');
-            }
-
+        if (!auth()->check()) {
+            return redirect()->route('login.form');
+        }
+        $user = auth()->user();
+        if (!$user->is_verified) {
+            return redirect()->route('verification')->with([
+                'message' => 'User not verified',
+            ]);
+        }
         return $next($request);
     }
 }
