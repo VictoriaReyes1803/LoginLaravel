@@ -116,7 +116,7 @@ class LoginController extends Controller
         $user->failed_login_attempts = 0;
 
         $code = rand(100000, 999999);
-        $user->verification_token = $code;
+        $user->verification_token = Hash::make($code);
         $user->is_verified = false;
         $user->save();
 
@@ -133,7 +133,7 @@ class LoginController extends Controller
         $user->failed_login_attempts += 1;
         $user->save();
 
-        return redirect()->route('login.form')->withErrors(['password' => 'Invalid credentials']);
+        return redirect()->route('login.form')->withErrors(['message' => 'Invalid credentials']);
     }
 }
 
@@ -190,7 +190,7 @@ private function verifyRecaptcha($recaptchaResponse)
             return redirect()->route('login.form')->withErrors(['error' => 'Too many failed attempts. Your account has been locked.']);
         }
     
-        if ($user->verification_token == $request->code) {
+        if (!Hash::check($request->code, $user->verification_token)) {
             $user->is_verified = true;
             $user->failed_verification_attempts = 0;
             $user->verification_token = null;
