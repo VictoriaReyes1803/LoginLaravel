@@ -133,7 +133,7 @@ class LoginController extends Controller
         $user->failed_login_attempts += 1;
         $user->save();
 
-        return redirect()->route('login.form')->withErrors(['password' => 'Invalid credentials']);
+        return redirect()->route('login.form')->withErrors(['message' => 'Invalid credentials']);
     }
 }
 
