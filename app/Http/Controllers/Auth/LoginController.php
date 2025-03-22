@@ -190,7 +190,8 @@ private function verifyRecaptcha($recaptchaResponse)
             return redirect()->route('login.form')->withErrors(['error' => 'Too many failed attempts. Your account has been locked.']);
         }
     
-        if (!Hash::check($request->code, $user->verification_token)) {
+        if (Hash::check($request->code, $user->verification_token)) {
+       
             $user->is_verified = true;
             $user->failed_verification_attempts = 0;
             $user->verification_token = null;
@@ -203,7 +204,7 @@ private function verifyRecaptcha($recaptchaResponse)
         else{
             $user->failed_verification_attempts += 1;
             $user->save();
-            return redirect()->route('verification.form')->withErrors(['code' => 'Invalid verification code.']);
+            return redirect()->route('verification')->withErrors(['code' => 'Invalid verification code.']);
         }
     
         return response()->json(['message' => 'Invalid verification code.'],400);
